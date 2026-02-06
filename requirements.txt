@@ -1,0 +1,9 @@
+torch
+torch-geometric
+neo4j
+networkx
+matplotlib
+scikit-learn
+flask
+flask-cors
+requests
