@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Graph Intelligence | Friend Recommender</title>
+  <style>
+    #graphViz {
+  width: 100%;
+  height: 400px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+  display: none; /* Hidden by default */
+  margin-top: 20px;
+}
+
+.view-toggle {
+  display: flex; gap: 10px; margin-bottom: 10px; justify-content: flex-end;
+}
+.toggle-btn {
+  background: transparent; border: 1px solid #334155; 
+  padding: 8px 16px; color: #94a3b8; width: auto; margin:0;
+}
+.toggle-btn.active {
+  background: var(--primary); color: white; border-color: var(--primary);
+}
+    :root {
+      --primary: #6366f1;
+      --bg: #050811;
+      --card-bg: rgba(10, 15, 30, 0.95);
+      --text: #f8fafc;
+      --accent: #00f2ff;
+      --terminal-bg: rgba(0, 0, 0, 0.8);
+      --success: #10b981;
+      --warning: #f59e0b;
+    }
+
+    body, html { 
+      margin: 0; padding: 0; width: 100%; height: 100%; 
+      overflow-x: hidden; font-family: 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg); color: var(--text);
+    }
+
+    #bg-canvas { position: fixed; top: 0; left: 0; z-index: 1; }
+
+    .ui-layer {
+      position: relative; z-index: 10;
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh;
+      padding: 40px 0;
+    }
+
+    .container {
+      background: var(--card-bg);
+      backdrop-filter: blur(25px);
+      border: 1px solid rgba(0, 242, 255, 0.2);
+      padding: 40px; border-radius: 24px;
+      width: 90%; max-width: 900px;
+      box-shadow: 0 0 50px rgba(0, 242, 255, 0.15);
+      position: relative;
+    }
+
+    h1 { 
+      margin: 0; font-size: 2.4em; font-weight: 900; letter-spacing: -1px;
+      background: linear-gradient(90deg, #6366f1, #00f2ff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle { color: #64748b; margin-bottom: 20px; letter-spacing: 2px; font-size: 0.8em; text-transform: uppercase; font-weight: 700; }
+
+    /* Layout Grids */
+    .top-section {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;
+    }
+    
+    @media (max-width: 768px) { .top-section { grid-template-columns: 1fr; } }
+
+    .control-group { margin-bottom: 20px; }
+    
+    label { display: block; margin-bottom: 8px; font-size: 0.85em; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
+
+    select, input[type="text"] { 
+      width: 100%; padding: 14px; background: #0f172a; border: 1px solid #334155;
+      border-radius: 12px; color: white; outline: none; font-weight: 600;
+      transition: 0.3s; box-sizing: border-box;
+    }
+    
+    select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0, 242, 255, 0.2); }
+
+    button { 
+      padding: 14px 24px; color: white; border: none; border-radius: 12px; 
+      font-weight: 800; cursor: pointer; transition: all 0.3s; 
+      text-transform: uppercase; font-size: 0.8em; letter-spacing: 1px;
+      width: 100%; margin-top: 10px;
+    }
+
+    .btn-analyze { background: var(--primary); }
+    .btn-analyze:hover { background: #4f46e5; box-shadow: 0 0 20px rgba(99, 102, 241, 0.6); transform: translateY(-2px); }
+    
+    .btn-push { background: var(--success); }
+    .btn-push:hover { background: #059669; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+
+    .btn-link { background: var(--warning); }
+    .btn-link:hover { background: #d97706; box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); }
+
+    /* Translator Box */
+    .translator-box {
+      border: 1px solid var(--accent);
+      border-radius: 16px;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.3);
+      min-height: 180px;
+      display: flex; flex-direction: column;
+    }
+
+    #cypherCode {
+      font-family: 'Consolas', 'Courier New', monospace;
+      color: #33ff33; line-height: 1.6; font-size: 0.95em;
+      white-space: pre-wrap; flex-grow: 1;
+    }
+
+    /* Management Section */
+    .management-panel {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      margin-top: 30px; padding-top: 30px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
+    }
+
+    /* Table & Results */
+    table { width: 100%; border-collapse: separate; border-spacing: 0 8px; margin-top: 25px; display: none; }
+    th { text-align: left; padding: 12px; color: #64748b; font-size: 0.75em; letter-spacing: 1px; }
+    td { background: rgba(255,255,255,0.03); padding: 16px; border-top: 1px solid rgba(255,255,255,0.05); }
+    td:first-child { border-radius: 10px 0 0 10px; border-left: 4px solid var(--accent); font-weight: 700; color: white; }
+    td:last-child { border-radius: 0 10px 10px 0; color: var(--accent); font-family: 'Courier New', monospace; font-weight: bold; }
+
+    /* Neural Log Terminal */
+    .terminal {
+      background: var(--terminal-bg);
+      border: 1px solid #334155; border-radius: 12px;
+      height: 100px; margin-top: 30px; padding: 15px;
+      font-family: 'Consolas', monospace; font-size: 0.8em;
+      color: #33ff33; overflow-y: auto; scroll-behavior: smooth;
+    }
+    .terminal span { color: var(--accent); }
+
+    /* Utilities */
+    #status { margin-top: 15px; color: var(--accent); font-weight: bold; font-family: monospace; display: none; text-align: center;}
+    .scan-line { width: 100%; height: 2px; background: var(--accent); position: absolute; left: 0; top: 0; opacity: 0.5; animation: scan 2s linear infinite; display: none; z-index: 5; pointer-events: none;}
+
+    @keyframes scan { 0% { top: 0; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+  </style>
+</head>
+<body>
+
+  <canvas id="bg-canvas"></canvas>
+
+  <div class="ui-layer">
+    <div class="container">
+      <div id="scanLine" class="scan-line"></div>
+      
+      <h1>Graph Intelligence</h1>
+      <div class="subtitle">Neural Link Analysis Engine</div>
+
+      <div class="top-section">
+        
+        <div class="panel-left">
+          <div class="control-group">
+            <label>Select Target Identity</label>
+            <select id="personSelect" onchange="startCypherTranslation()">
+              <option value="">Initializing Database...</option>
+            </select>
+            <button class="btn-analyze" onclick="loadRecs()">Execute Analysis</button>
+          </div>
+          <div id="status"></div>
+        </div>
+
+        <div class="translator-box">
+          <div class="subtitle" style="color: var(--accent); margin-bottom: 10px;">Live Cypher Translator</div>
+          <div id="cypherCode">// System ready.
+// Select a node to generate NoSQL query...</div>
+        </div>
+      </div>
+
+      <table id="recTable">
+        <thead>
+          <tr>
+            <th>Recommended Link</th>
+            <th>Topology (Shared Neighbors)</th>
+            <th>Neural Confidence Score</th>
+          </tr>
+        </thead>
+        <tbody id="recBody"></tbody>
+      </table>
+     <div class="view-toggle">
+  <button class="toggle-btn active" onclick="switchView('table')">Table View</button>
+  <button class="toggle-btn" onclick="switchView('graph')">Graph View</button>
+</div>
+
+<div id="graphViz"></div>
+      <div class="management-panel">
+        
+        <div>
+          <label style="color: var(--success);">Register New Node</label>
+          <div style="display: flex; gap: 10px; flex-direction: column;">
+            <input type="text" id="newMemberName" placeholder="Enter Name (e.g. Amina)">
+            <button class="btn-push" onclick="pushNewNode()">Push Node to Graph</button>
+          </div>
+        </div>
+
+        <div>
+          <label style="color: var(--warning);">Establish Relationship</label>
+          <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <select id="linkSource"><option>Source...</option></select>
+            <span style="align-self: center; color: var(--text);">↔</span>
+            <select id="linkTarget"><option>Target...</option></select>
+          </div>
+          <button class="btn-link" onclick="pushNewLink()">Push Connection</button>
+        </div>
+
+      </div>
+
+      <div class="terminal" id="neuralLog">
+        > system initialization: <span>COMPLETE</span><br>
+        > awaiting user input...
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const API = "http://127.0.0.1:5000";
+
+    // --- 1. SYSTEM LOGGING & AUDIO ---
+    function logNeural(message) {
+      const logBox = document.getElementById('neuralLog');
+      const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+      logBox.innerHTML += `<br> [${timestamp}] > ${message}`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function speak(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); // Stop previous speech
+        const msg = new SpeechSynthesisUtterance(text);
+        const voices = window.speechSynthesis.getVoices();
+        // Try to find a robotic/Google voice
+        msg.voice = voices.find(v => v.name.includes('Google US English')) || voices[0];
+        msg.rate = 1.1; 
+        msg.pitch = 1.0;
+        window.speechSynthesis.speak(msg);
+      }
+    }
+
+    // --- 2. DATA LOADING (Populates ALL Dropdowns) ---
+    async function loadPeople() {
+      try {
+        const res = await fetch(`${API}/people`);
+        const data = await res.json();
+        
+        // We have 3 dropdowns to fill
+        const selects = [
+          document.getElementById("personSelect"), 
+          document.getElementById("linkSource"), 
+          document.getElementById("linkTarget")
+        ];
+
+        selects.forEach(sel => {
+          const currentVal = sel.value; // Remember selection if possible
+          sel.innerHTML = '<option value="">Select Node...</option>';
+          data.forEach(name => {
+            const opt = document.createElement("option");
+            opt.value = name; opt.textContent = name;
+            sel.appendChild(opt);
+          });
+          // Restore if still exists
+          if (data.includes(currentVal)) sel.value = currentVal; 
+        });
+
+        logNeural("database sync: <span>ACTIVE</span>. Nodes loaded.");
+      } catch(e) { 
+        logNeural("database connection: <span style='color:red;'>FAILED</span> (Check Flask API)");
+      }
+    }
+
+   // --- 3. ANALYSIS LOGIC ---
+
+
+    // --- 3. ANALYSIS LOGIC ---
+    async function loadRecs() {
+      const name = document.getElementById("personSelect").value;
+      if(!name) return;
+
+      const table = document.getElementById("recTable");
+      const status = document.getElementById("status");
+      const tbody = document.getElementById("recBody");
+      const scan = document.getElementById("scanLine");
+
+      logNeural(`starting inference pipeline for <span>${name}</span>...`);
+      speak(`Running analysis for ${name}.`);
+
+      // UI States
+      status.style.display = "block";
+      status.innerHTML = `> SCANNING TOPOLOGY...`;
+      table.style.display = "none";
+      document.getElementById("graphViz").style.display = "none"; // Hide graph during scan
+      scan.style.display = "block";
+
+      try {
+        const res = await fetch(`${API}/recommendations?name=${encodeURIComponent(name)}`);
+        const recs = await res.json();
+        
+        // --- THIS WAS MISSING ---
+        window.lastRecs = recs; // Save data for the Graph View!
+        // ------------------------
+
+        tbody.innerHTML = "";
+        
+        // Simulate processing time
+        setTimeout(() => {
+          if(recs.length > 0) {
+            logNeural(`latent space mapping complete. <span>${recs.length} matches</span> found.`);
+            speak(`Analysis complete. Found ${recs.length} matches.`);
+            
+            recs.forEach(r => {
+              // Logic to show specific mutual friends
+              let explainBox = "";
+              if (r.reasons && r.reasons.length > 0) {
+                  explainBox = `<span style="color:var(--success); font-weight:bold;">Via: ${r.reasons.join(", ")}</span>`;
+              } else {
+                  explainBox = `<span style="opacity:0.7">${r.mutual_count || 0} shared neighbors</span>`;
+              }
+              
+              const explainText = `GraphSAGE Logic: High similarity vector with ${r.mutual_count} shared neighbors.`;
+              
+              tbody.innerHTML += `<tr>
+                <td title="${explainText}">${r.name}</td>
+                <td>${explainBox}</td>
+                <td>${Number(r.score).toFixed(4)}</td>
+              </tr>`;
+            });
+            
+            // Show the active view (Table or Graph)
+            const isGraphActive = document.querySelector('.toggle-btn.active').innerText.includes('Graph');
+            if(isGraphActive) {
+                renderGraph(name, recs);
+                document.getElementById("graphViz").style.display = "block";
+            } else {
+                table.style.display = "table";
+            }
+
+          } else {
+            logNeural("scan finished: no latent connections found.");
+            speak("No latent connections found.");
+            status.innerHTML = "> NO RECOMMENDATIONS.";
+          }
+          scan.style.display = "none";
+          status.style.display = "none";
+        }, 1200);
+
+      } catch(e) { 
+        logNeural("pipeline error: API unreachable.");
+        status.innerHTML = "> SYSTEM ERROR";
+        scan.style.display = "none";
+      }
+    }
+
+    // --- 4. LIVE TRANSLATOR (Typing Effect) ---
+    let typeTimeout; 
+    function startCypherTranslation() {
+      const name = document.getElementById("personSelect").value;
+      const codeBox = document.getElementById("cypherCode");
+
+      if (!name) {
+        codeBox.innerHTML = "// Select a node...";
+        return;
+      }
+
+      // The Cypher Query to display
+      const query = `MATCH (p:Person {name: "${name}"})
+MATCH (p)-[r:FRIEND]-(friend)
+RETURN p, friend, r;`;
+
+      // Reset and Type
+      codeBox.innerHTML = "";
+      clearTimeout(typeTimeout); // Stop any previous typing
+      typeEffect(codeBox, query, 0);
+      
+      logNeural(`translating intent to Cypher for: ${name}`);
+    }
+
+    function typeEffect(element, text, index) {
+      if (index < text.length) {
+        element.innerHTML += text.charAt(index);
+        index++;
+        typeTimeout = setTimeout(() => typeEffect(element, text, index), 25); 
+      }
+    }
+
+    // --- 5. GRAPH MANAGEMENT (Push Nodes/Links) ---
+    async function pushNewNode() {
+      const nameInput = document.getElementById("newMemberName");
+      const name = nameInput.value.trim();
+      if (!name) return speak("Please enter a name.");
+
+      logNeural(`injecting node [${name}] into Neo4j cloud...`);
+      
+      try {
+        const res = await fetch(`${API}/add_node`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        });
+        
+        if (res.ok) {
+          speak(`Node ${name} created.`);
+          nameInput.value = "";
+          loadPeople(); // Refresh all dropdowns
+        } else { throw new Error(); }
+      } catch(e) {
+        logNeural("insertion failed: database rejected request.");
+      }
+    }
+
+    async function pushNewLink() {
+      const p1 = document.getElementById("linkSource").value;
+      const p2 = document.getElementById("linkTarget").value;
+      
+      if (!p1 || !p2 || p1 === p2) {
+        return speak("Invalid link selection.");
+      }
+
+      logNeural(`establishing edge: ${p1} <-> ${p2}...`);
+
+      try {
+        const res = await fetch(`${API}/add_link`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ person1: p1, person2: p2 })
+        });
+        
+        if (res.ok) {
+          speak("Link established.");
+          logNeural("topology updated: edge committed.");
+        }
+      } catch(e) {
+        logNeural("link failed: check API.");
+      }
+    }
+
+    // --- 6. BACKGROUND ANIMATION ---
+    const canvas = document.getElementById('bg-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    function initCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      particles = [];
+      for(let i=0; i<60; i++) {
+        particles.push({
+          x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+          vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5,
+          r: Math.random() * 2 + 1
+        });
+      }
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "rgba(0, 242, 255, 0.5)";
+      ctx.strokeStyle = "rgba(99, 102, 241, 0.15)";
+      
+      particles.forEach((p, i) => {
+        p.x += p.vx; p.y += p.vy;
+        if(p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if(p.y < 0 || p.y > canvas.height) p.vy *= -1;
+        
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+        
+        for(let j=i+1; j<particles.length; j++) {
+          const p2 = particles[j];
+          const dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+          if(dist < 120) {
+            ctx.lineWidth = 1; ctx.beginPath();
+            ctx.moveTo(p.x, p.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+          }
+        }
+      });
+      requestAnimationFrame(animate);
+    }
+
+    // --- INITIALIZATION ---
+    window.addEventListener('resize', initCanvas);
+    window.addEventListener('DOMContentLoaded', () => {
+      initCanvas();
+      animate();
+      loadPeople();
+      window.speechSynthesis.onvoiceschanged = () => {}; 
+    });
+    // --- 7. GRAPH VISUALIZATION LOGIC ---
+
+// Switch between Table and Graph
+function switchView(mode) {
+  document.getElementById("recTable").style.display = (mode === 'table') ? 'table' : 'none';
+  document.getElementById("graphViz").style.display = (mode === 'graph') ? 'block' : 'none';
+  
+  // Update buttons
+  const btns = document.querySelectorAll('.toggle-btn');
+  btns[0].classList.toggle('active', mode === 'table');
+  btns[1].classList.toggle('active', mode === 'graph');
+
+  if(mode === 'graph') {
+      // Re-render graph if data exists
+      const name = document.getElementById("personSelect").value;
+      if(window.lastRecs) renderGraph(name, window.lastRecs);
+  }
+}
+
+function renderGraph(centerNode, data) {
+  const cy = cytoscape({
+    container: document.getElementById('graphViz'),
+    style: [
+      // NODE STYLES
+      { selector: 'node', style: {
+          'background-color': '#6366f1',
+          'label': 'data(id)',
+          'color': '#fff',
+          'font-size': '12px',
+          'text-valign': 'center',
+          'width': 40, 'height': 40
+      }},
+      // CENTER NODE (The Person You Selected)
+      { selector: `node[id="${centerNode}"]`, style: {
+          'background-color': '#00f2ff',
+          'width': 60, 'height': 60,
+          'font-weight': 'bold',
+          'color': '#000'
+      }},
+      // EDGE STYLES
+      { selector: 'edge', style: {
+          'width': 2,
+          'line-color': '#334155',
+          'curve-style': 'bezier',
+          'target-arrow-shape': 'triangle'
+      }},
+      // RECOMMENDATION EDGES (Dotted Line)
+      { selector: 'edge.recommendation', style: {
+          'line-style': 'dashed',
+          'line-color': '#10b981',
+          'width': 3
+      }}
+    ]
+  });
+
+  const elements = [];
+  
+  // 1. Add Center Node
+  elements.push({ data: { id: centerNode } });
+
+  // 2. Add Recommended Nodes & Edges
+  data.forEach(r => {
+    // Add the recommended friend node
+    elements.push({ data: { id: r.name } });
+    
+    // Add the "Recommendation" link (Dashed Green)
+    elements.push({ 
+        data: { source: centerNode, target: r.name }, 
+        classes: 'recommendation' 
+    });
+
+    // Add "Via" Nodes (The mutual friends)
+    if(r.reasons && r.reasons.length > 0) {
+        r.reasons.forEach(mutual => {
+            // Check if node exists to avoid duplicates
+            if(!elements.find(e => e.data.id === mutual)) {
+                elements.push({ data: { id: mutual } });
+            }
+            // Link Center -> Mutual -> Recommended
+            elements.push({ data: { source: centerNode, target: mutual } });
+            elements.push({ data: { source: mutual, target: r.name } });
+        });
+    }
+  });
+
+  cy.add(elements);
+  cy.layout({ name: 'cose', animate: true }).run();
+}
+  </script>
+</body>
+</html>
